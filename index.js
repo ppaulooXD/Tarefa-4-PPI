@@ -1,5 +1,7 @@
 import express from 'express';
 import path from 'path';
+import cookieParser from 'cookie-parser';
+import session from 'express-session';
 
 const porta = 3000;
 const host = '0.0.0.0';
@@ -133,13 +135,38 @@ function listausuarios(requisicao, resposta){
                 
 }
 
+function autenticacao(requisicao, resposta, next){
+    if(requisicao.session.usuarioLogado){
+        next();
+    }
+    else{
+        resposta.redirect('/login.html');
+    }
+}
+
 const app = express();
 
+
 app.use(express.urlencoded({ extended: true }));
-
+app.use(cookieParser());
 app.use(express.static(path.join(process.cwd(), 'páginas')));
+app.use(session({
+    secret: "Chav3S3cr3ta",
+    resave: true,
+    saveUninitialized: true,
+    cookie: {
+        maxAge: 1000 * 60 * 15
+    }
+}))
 
-app.get('/', (requisicao, resposta) => {
+app.get('/',autenticacao, (requisicao, resposta) => {
+    const ultimoacesso = requisicao.cookies.ultimoacesso;
+    const data = new Date();
+    resposta.cookie("ultimoacesso", data.toLocaleString(),{
+        maxAge: 1000 * 60 * 60 * 24 * 30,
+        httpOnly: true
+    });
+
     resposta.end(`
                 <!DOCTYPE html>
                 <html lang="pt-br">
@@ -178,14 +205,44 @@ app.get('/', (requisicao, resposta) => {
                     <div class="container">
                         <h1>Menu</h1><br>
                         <a class= "a" href="/cadastro.html">Cadastrar</a>
+                        </br>
+                        <p style=" margin-top: 50px;font-family: Verdana" >Último acesso: ${ultimoacesso}</p>
                     </div>
                 </body>
                 </html>       
     `);
 })
 
+app.post('/login', (requisicao, resposta) => {
+     const usuario = requisicao.body.usuario;
+     const senha = requisicao.body.senha;
 
-app.post('/cadastro', listausuarios);
+     if(usuario &&  senha && (usuario == "paulo") && (senha == "paulo")){
+        requisicao.session.usuarioLogado = true;
+        resposta.redirect('/');
+     }
+     else{
+        resposta.end(
+            `<!DOCTYPE html>
+            <html lang="pt-br">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Erro</title>
+            </head>
+            <body>
+                <h1 style="color: red; text-align: center; font-family: Verdana">Usuário ou senha inválidos</h1>
+                </br>
+                <div style="text-align: center">
+                    <a style="font-family: Verdana; text-decoration: none" href="/login.html">Voltar</a>
+                </div>
+            </body>
+            </html>
+        `);
+     }
+})
+
+app.post('/cadastro',autenticacao, listausuarios);
 
 app.listen(porta, host, () => {
     console.log(`Servidor rodando na url http://${host}:${porta}`);
